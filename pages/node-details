@@ -1,0 +1,92 @@
+<div class="mathnode-panel label noselect">Node Value</div>
+<div class="mathnode-panel">
+    <a class="mathnode-panel line-label noselect" id="mathnode-panel-node-value" title="Node value">0</a>
+</div>
+<div class="mathnode-panel vertical-divider"></div>
+
+<div id="unit-converter-panel">
+    <div class="mathnode-panel label noselect">Unit Converter</div>
+    <div class="mathnode-panel center">
+        <select id="available-units" class="unit-converter"></select>
+    </div>
+    <div class="mathnode-panel center">
+        <input id="custom-unit-type" class="mathnode-panel custom-unit-type" placeholder="Custom Type" />
+    </div>
+    <div class="mathnode-panel vertical-divider"></div>
+</div>
+
+<div class="mathnode-panel label noselect">Add to Sidebar</div>
+<div class="mathnode-panel">
+    <select id="layout-categories" class="fa layout-selector"></select>
+    <a class="mathnode-panel button noselect" id="mathnode-panel-node-add-layout" onclick="$this.addToLayout();" title="Add node to sidebar">Add</a>
+</div>
+<div class="mathnode-panel vertical-divider"></div>
+
+<script>
+    $this.focusOn = (element) => {
+        const el = document.getElementById(element);
+        if (el) el.focus();
+    }
+
+    $this.addToLayout = async () => {
+        const dropdown = document.getElementById('layout-categories');
+        const layoutId = parseInt(MathNode.Interface.layout.selected);
+        const catId = parseInt(dropdown.options[dropdown.selectedIndex].value);
+        const packages = MathNode.Interface.layout.object.packages
+
+        // Find the current highest position and add one to it (put package at the bottom of the category)
+        const position = Object.keys(packages).reduce((max, pkg) => {
+            return (packages[pkg].category_id === catId && packages[pkg].position > max) ? packages[pkg].position : max;
+        }) + 1;
+
+        if (layoutId !== 1) {
+            if (await mndb.layout.addPackage(layoutId, catId, position, $this.node.settings.internal.id)) {
+                MathNode.Interface.layout.load(layoutId);
+            }
+        } else {
+            alert("Modifying the default layout is not allowed. If you want to customize it, please save under a new name first.");
+        }
+    }
+
+    function init() {
+        const numericInputs = Array.from(document.getElementsByClassName('mathnode-panel numeric'));
+
+        // Filter all numeric inputs to make sure they only contain allowed values
+        numericInputs.map(input => {
+            filter(input, (value) => /^\d*\.?\d*$/.test(value));
+        });
+
+        // Add layout categories
+        const categories = MathNode.Interface.layout.object.categories;
+        const iconUnicode = MathNode.Interface.layout.category.unicode;
+        const dropdown = document.getElementById('layout-categories');
+
+        Object.keys(categories).map(key => {
+            const option = document.createElement('option');
+            option.classList.add('fas');
+            option.value = categories[key].id;
+            option.innerHTML = '&#x' + iconUnicode[categories[key].icon] + ';&ensp;' + categories[key].name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            dropdown.appendChild(option);
+        });
+
+        $this.node = MathNode.globals.sidebar.selected;
+    }
+
+    // Restricts input for the given input element by a function
+    function filter(textbox, func) {
+        ["input", "keydown", "keyup", "mousedown", "mouseup", "select", "contextmenu", "drop"].forEach(function(event) {
+            textbox.addEventListener(event, function() {
+                if (func(this.value)) {
+                    this.oldValue = this.value;
+                    this.oldSelectionStart = this.selectionStart;
+                    this.oldSelectionEnd = this.selectionEnd;
+                } else if (this.hasOwnProperty("oldValue")) {
+                    this.value = this.oldValue;
+                    this.setSelectionRange(this.oldSelectionStart, this.oldSelectionEnd);
+                }
+            });
+        });
+    }
+
+    init();
+</script>

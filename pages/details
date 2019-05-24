@@ -1,0 +1,35 @@
+<div id="mathnode-panel-title" class="mathnode-panel label title noselect">Project</div>
+
+<script>
+    $this.focusOn = (element) => {
+        const el = document.getElementById(element);
+        if (el) el.focus();
+    }
+
+    function init() {
+        const numericInputs = Array.from(document.getElementsByClassName('mathnode-panel numeric'));
+
+        // Filter all numeric inputs to make sure they only contain allowed values
+        numericInputs.map(input => {
+            filter(input, (value) => /^\d*\.?\d*$/.test(value));
+        });
+    }
+
+    // Restricts input for the given input element by a function
+    function filter(textbox, func) {
+        ["input", "keydown", "keyup", "mousedown", "mouseup", "select", "contextmenu", "drop"].forEach(function(event) {
+            textbox.addEventListener(event, function() {
+                if (func(this.value)) {
+                    this.oldValue = this.value;
+                    this.oldSelectionStart = this.selectionStart;
+                    this.oldSelectionEnd = this.selectionEnd;
+                } else if (this.hasOwnProperty("oldValue")) {
+                    this.value = this.oldValue;
+                    this.setSelectionRange(this.oldSelectionStart, this.oldSelectionEnd);
+                }
+            });
+        });
+    }
+
+    init();
+</script>

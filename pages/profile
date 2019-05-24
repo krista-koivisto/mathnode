@@ -1,0 +1,211 @@
+<div class="profile-main">
+
+    <!-- Sidebar (left side) -->
+
+    <div class="profile-menu noselect">
+        <div class="profile-menu-contents">
+            <span class="profile-menu-container">
+                <span class="profile-menu-category">
+                    <span class="profile-menu-title">USER SETTINGS</span>
+                    <a href="#" id="account-button"  class="profile-menu-item selected">Account</a>
+                    <a href="#" id="packages-button" class="profile-menu-item">Packages</a>
+                    <a href="#" id="layouts-button"  class="profile-menu-item">Layouts</a>
+                </span>
+                <span class="profile-menu-category">
+                    <span class="profile-menu-title">FEEDBACK</span>
+                    <a href="#" id="contact-button" class="profile-menu-item">Contact</a>
+                    <a href="#" id="report-button" class="profile-menu-item">Report an Issue</a>
+                </span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Body (middle) -->
+
+    <div class="profile-body">
+        <div class="profile-body-contents">
+            <div class="page-container account" id="account-page">
+                <div style="display: block; height: 184px;">
+                    <div class="profile-picture"></div>
+                    <div id="profile-last-login"></div>
+                    <div id="profile-registration"></div>
+                    <div id="profile-name"></div>
+                    <div id="profile-type"></div>
+                    <div id="profile-email"></div>
+                    <div id="profile-pass"><a href="#" class="profile-body-link">Change Password</a></div>
+                </div>
+                <div id="profile-verified"></div>
+            </div>
+            <div class="page-container packages" id="packages-page"></div>
+            <div class="page-container layouts" id="layouts-page"></div>
+            <div class="page-container contact" id="contact-page">Contact<br>Under construction... (That's so 90s!!)</div>
+            <div class="page-container report" id="report-page">Report an Issue<br>Under construction... (That's so 90s!!)</div>
+        </div>
+    </div>
+
+    <!-- Close page area (right side) -->
+
+    <div class="profile-close">
+        <div class="profile-close-contents">
+            <a href="#" class="close" title="Close" onclick="MathNode.Interface.page.close();">
+                <span class="profile-close-button"><i class="fas fa-times"></i></span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    const pages = {};
+    const actions = {
+        account: initAccount,
+        packages: initPackages,
+        layouts: initLayouts,
+        contact: () => {},
+        report: () => {},
+    };
+
+    function datify(datetime) {
+        const date = new Date(datetime);
+        return ((date.toDateString() == (new Date()).toDateString()) ? date.toLocaleTimeString() : date.toLocaleDateString());
+    }
+
+    async function start() {
+        await init(['account', 'packages', 'layouts', 'contact', 'report']);
+        await view(pages['account']);
+    }
+
+    async function init(which) {
+        // Register event clicks for each page
+        which.map(name => {
+            pages[name] = {
+                action: actions[name],
+                button: document.getElementById(name + '-button'),
+                page: document.getElementById(name + '-page'),
+            };
+            pages[name].button.addEventListener('click', onButtonClick.bind(pages[name]));
+        });
+
+        // Register load package function
+        $this.loadPackage = async (url) => {
+            const tab = MathNode.Interface.tabs.new();
+            const pkg = await mndb.package.get(url);
+            tab.graph.fromJSON(JSON.stringify(pkg.graph));
+            tab.setTitle(pkg.name);
+            MathNode.Interface.page.close();
+        }
+
+        // Package update function
+        $this.updatePackage = async (e, url, what, value) => {
+            const resp = await mndb.package.update(url, what, value);
+
+            if (resp && resp.code && resp.code === 204) {
+                let isPublished = e.dataset.published = (e.dataset.published == 1 ? 0 : 1);
+                e.setAttribute('onclick', $this.reference+".updatePackage(this, '"+url+"', 'publish', " + ((isPublished == 1) ? '0' : '1') + ");");
+                e.classList.remove('orange', 'blue');
+                e.classList.add(isPublished ? 'orange' : 'blue');
+                e.innerText = isPublished ? 'Make Private' : 'Publish';
+            }
+        }
+
+        $this.removePackage = async(url) => {
+            const doRemove = confirm("If you do this your package will be permanently removed and if any other packages rely on it, they will no longer be accessible. Are you sure you want to remove it?");
+
+            if (doRemove) {
+                const resp = await mndb.package.remove(url);
+
+                if (resp && resp.code && resp.code === 204) {
+                    const pack = document.getElementById('pack-'+url);
+                    pack.remove();
+                }
+            }
+        }
+
+        $page.addEventListener('keydown', (e) => {if (e.key.toLowerCase() === 'escape') MathNode.Interface.page.close();});
+    }
+
+    async function view(what) {
+        Object.keys(pages).map(name => {
+            pages[name].button.classList.remove('selected');
+            pages[name].page.classList.add('hidden');
+        });
+
+        what.button.classList.add('selected');
+        what.page.classList.remove('hidden');
+        await what.action();
+    }
+
+    async function onButtonClick(e) {
+        await view(this);
+        e.preventDefault();
+    }
+
+    function htmlifyPackage(pack) {
+        let isPublished = (pack.status == 1);
+
+        let pkg = '<div class="profile package title">' + pack.name + '</div>';
+        pkg += '<div class="profile package body">';
+        pkg += '<a href="#" class="profile package button green" onclick="'+$this.reference+'.loadPackage(\''+pack.url+'\');">Open</a>';
+        pkg += '<a href="#" class="profile package button '+(isPublished ? 'orange' : 'blue')+'"';
+        pkg += 'onclick="'+$this.reference+'.updatePackage(this, \''+pack.url+'\', \'publish\', '+(isPublished ? '0' : '1')+');"';
+        pkg += 'data-published="'+(isPublished ? 1 : 0)+'">';
+        pkg += isPublished ? 'Make Private' : 'Publish';
+        pkg += '</a>';
+        pkg += '<a href="#" class="profile package button red" onclick="'+$this.reference+'.removePackage(\''+pack.url+'\');">Remove</a>';
+        pkg += '</div>';
+        return pkg;
+    }
+
+    async function initAccount() {
+        if (!this.loaded) {
+            const user = await mndb.user.get(mndb.credentials);
+            const types = ['', '', 'Banned', 'Guest', 'Unverified', 'Member', 'Member', '', 'Moderator', '', 'Administrator'];
+            document.getElementById('profile-name').innerText = user.name;
+            document.getElementById('profile-type').innerText = types[user.type];
+            document.getElementById('profile-email').innerText = user.email;
+            document.getElementById('profile-verified').outerHTML = '';
+            document.getElementById('profile-last-login').innerText = 'Last login: ' + datify(user.last_login);
+            document.getElementById('profile-registration').innerText = 'Registered: ' + datify(user.reg_date);
+            this.loaded = true;
+        }
+    }
+
+    async function initPackages() {
+        if (!this.loaded) {
+            const profile = document.getElementById('packages-page');
+            const packages = await mndb.user.retrieve({thing: 'packages', user: mndb.credentials});
+
+            packages.map(pkg => {
+                const pack = document.createElement('div');
+                pack.setAttribute('id', 'pack-'+pkg.url);
+                pack.classList.add('package-preview', 'noselect');
+                pack.innerHTML = htmlifyPackage(pkg);
+                profile.appendChild(pack);
+            });
+
+            this.loaded = true;
+        }
+    }
+
+    async function initLayouts() {
+        if (!this.loaded) {
+            const profile = document.getElementById('layouts-page');
+            const layouts = MathNode.Interface.layout.list;
+
+            layouts.map(async layout => {
+                const pack = document.createElement('div');
+                pack.classList.add('package-preview', 'noselect');
+                let item = '<div class="profile layout title">' + layout.name + '</div>'; // @TODO @BUG @IMPORTANT: Potential for XSS here!!!
+                item += '<div class="profile package body">';
+                item += '<a href="#" class="profile layout button green" onclick="alert(\'Not yet implemented!\')">Use</a>';
+                item += '<a href="#" class="profile layout button red" onclick="alert(\'You can\\\'t remove the default layout!\')">Delete</a>';
+                item += '</div>';
+                pack.innerHTML = item;
+                profile.appendChild(pack);
+            });
+
+            this.loaded = true;
+        }
+    }
+
+    start();
+</script>

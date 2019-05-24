@@ -1,0 +1,41 @@
+<div class="icon-search-main">
+    <input type="text" class="icon-search-text" id="icon-search-bar" oninput="$this.search(this);"></input>
+    <div id="icon-search-results" class="icon-search-results">
+    </div>
+</div>
+
+<script>
+    const icons = MathNode.globals.icons;
+    const exclude = ['google-plus-square', 'cookie']; // Broken icons
+    const area = document.getElementById('icon-search-results');
+    const createElement = MathNode.html.createElement;
+
+    function create(icon) {
+        const type = icons[icon].type.find(t => t != 'b'); // Exclude brands
+        if (!exclude.includes(icon) && type) {
+            const link = createElement({type: 'a', classes: ['icon-block-link'], href: "#", onclick: $parent.setIcon.bind({type: type, icon: icon}), title: icon, target: area});
+            const container = createElement({type: 'div', classes: ['icon-block'], target: link});
+            const label = createElement({type: 'i', classes: ['fa'+type, 'fa-' + MathNode.html.escape(icon)], target: container});
+        }
+    }
+
+    function clear() {
+        area.innerHTML = '';
+    }
+
+    async function load(items) {
+        items.map(item => create(item));
+    }
+
+    async function search(query) {
+        await load(Object.keys(icons).filter(icon => {
+            return (icon.indexOf(query) != -1 || icons[icon].terms.find(term => term.indexOf(query) != -1));
+        }));
+    }
+
+    async function init() {
+        $this.search = (input) => { if (input.value.length > 1) { clear(); search(input.value); } };
+    }
+
+    init();
+</script>

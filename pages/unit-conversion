@@ -1,0 +1,4 @@
+<div class="mathnode-panel label">Unit Converter</div>
+<div class="mathnode-panel center">
+    <select id="available-units" class="unit-converter"></select>
+</div>

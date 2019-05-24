@@ -1,0 +1,413 @@
+<div class="layout-main" id="layout-main">
+
+    <!-- Sidebar (left side) -->
+
+    <div class="layout-menu noselect">
+        <div class="layout-menu-contents">
+            <span class="layout-menu-container">
+                <span id="layout-list-sidebar" class="layout-menu-category">
+                    <span class="layout-menu-title">Layouts</span>
+                </span>
+                <span id="categories-list-sidebar" class="layout-menu-category">
+                    <span class="layout-menu-title">Categories</span>
+                </span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Body (middle) -->
+
+    <div class="layout-body">
+        <div id="layout-editor-body" class="layout-body-contents">
+        </div>
+    </div>
+
+    <!-- Close page area (right side) -->
+
+    <div class="layout-close">
+        <div class="layout-close-contents">
+            <a href="#" class="close" title="Close" onclick="$this.close();">
+                <span class="layout-close-button"><i class="fas fa-times"></i></span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    const HTMLEscape = MathNode.html.escape;
+    const createElement = MathNode.html.createElement;
+    const mainPage = document.getElementById('layout-main');
+    var pages = {};
+    var categories = {};
+    var selectedIcon = null;
+    var categoryIcon = null;
+    var categoryName = null;
+    var iconsDialog = null;
+    var packageList = null;
+    var categoryList = null;
+    var active = {layout: null, category: null};
+
+    async function start() {
+        await init(MathNode.Interface.layout.list);
+        await view(active.layout);
+        await view(active.category);
+    }
+
+    async function save() {
+        const data = packageList.data;
+        const packages = {};
+        var index = 0;
+
+        mainPage.classList.add('processing');
+
+        // Update category data
+        Object.keys($this.layout.categories).map(cat => {
+            if ($this.layout.categories[cat].id === data.category.id) {
+                $this.layout.categories[cat].icon = selectedIcon || data.category.icon;
+                $this.layout.categories[cat].name = categoryName.value || data.category.name;
+            }
+        });
+
+        // Add packages for all other categories
+        Object.keys($this.layout.packages).map(pkg => {
+            if ($this.layout.packages[pkg].category_id !== data.category.id) packages[index++] = $this.layout.packages[pkg];
+        });
+
+        // Add packages for this category
+        packageList.items.map((item, position) => {
+            packages[index++] = { ...item.data, position: position };
+        });
+
+        $this.modified = false;
+        $this.layout.packages = packages;
+        await $this.layout.save($this.layout.name);
+
+        update();
+    }
+
+    async function updateCategories() {
+        var index = 0;
+
+        $this.layout.categories = {};
+        categoryList.items.map(item => {
+            if (item.data.id >= 0) {
+                $this.layout.categories[index++] = { ...item.data, position: index };
+            }
+        });
+
+        await $this.layout.save($this.layout.name);
+    }
+
+    async function removeCategory() {
+        var index = 0;
+
+        mainPage.classList.add('processing');
+
+        if (confirm("Are you sure you want to remove this category? There is no way to undo the changes if you do.")) {
+            $this.layout.categories = {};
+            active.category = null;
+
+            // Filter out category to be removed
+            categoryList.items.map(item => {
+                if (this.category.id !== item.data.id && item.data.id >= 0) {
+                    $this.layout.categories[index++] = { ...item.data, position: index };
+                }
+            });
+
+            await $this.layout.save($this.layout.name);
+            update();
+        }
+
+        mainPage.classList.remove('processing');
+    }
+
+    async function newCategory() {
+        mainPage.classList.add('processing');
+        $this.layout.addCategory('New Category', 'question-circle');
+
+        active = {layout: null, category: null};
+        categories = {};
+
+        await $this.layout.save($this.layout.name);
+        await update();
+
+        // Find the new category by finding the highest position within the category
+        const newCat = Object.keys(categories).reduce((chosen, i) => {
+            if (categories[i].data.category.layout_id === active.layout.data.id) {
+                if (categories[i].data.category.position > categories[chosen].data.category.position) return i;
+            }
+        });
+
+        active.category = categories[newCat];
+        await view(active.category);
+    }
+
+    async function onCategoryMove(e) {
+        const list = this.parent;
+        list.element.classList.add('processing');
+        list.disable();
+
+        await updateCategories();
+
+        list.element.classList.remove('processing');
+        list.enable();
+    }
+
+    async function onPackageMove(e) {
+        $this.modified = true;
+    }
+
+    async function onPackageRemove(e) {
+        $this.modified = true;
+    }
+
+    async function setIcon() {
+        categoryIcon.icons[0].set(this.icon);
+        selectedIcon = this.icon;
+    }
+
+    async function showIconsDialog(e) {
+        if (!iconsDialog) {
+            $this.setIcon = setIcon;
+            iconsDialog = createElement({type: 'div', classes: ['layout-icon-dialog'], target: document.body});
+            await MathNode.Interface.page.openInside(iconsDialog, 'icon-search', {allowCache: false, parent: $this});
+        }
+
+        const searchBar = document.getElementById('icon-search-bar');
+        searchBar.value = selectedIcon || this.icon;
+        searchBar.dispatchEvent(new CustomEvent('input'));
+        iconsDialog.classList.remove('hidden');
+
+        e.stopPropagation();
+    }
+
+    async function hideIconsDialog() {
+        iconsDialog.classList.add('hidden');
+    }
+
+    async function addPackage(pack) {
+        // Add a new item to the package list
+        const item = packageList.add([{data: pack, item: {draggable: true}, element: {classes: ['layout-package']}}]);
+
+        // Create the item layout
+        item.add(new MathNode.html.Button({item: {icon: 'bars'}, element: {classes: ['layout-grabbable', 'left', 'noselect', 'soft-corner']}}));
+        item.add(new MathNode.html.Label( {item: {text: pack.name}, element: {classes: ['layout-package-label', 'noselect']}}));
+        item.add(new MathNode.html.Button({item: {icon: 'times', action: item.remove}, element: {classes: ['layout-package-button', 'delete', 'noselect', 'red', 'right', 'soft-corner']}}));
+        item.element.addEventListener('dragfinish', onPackageMove.bind(item));
+        item.element.addEventListener('remove', onPackageRemove.bind(item));
+    }
+
+    async function loadCategory(data) {
+        const body = document.getElementById('layout-' + parseInt(data.layout.id).toString() + '-page');
+        const category = data.category.id;
+        selectedIcon = data.category.icon;
+        body.innerHTML = '';
+
+        // Category icon and title
+        const title = createElement({type: 'div', target: body});
+        categoryIcon = new MathNode.html.Button({item: {action: showIconsDialog.bind(data.category)}, element: {classes: ['icon-selector-button'], target: title}});
+        categoryName = new MathNode.html.Input( {item: {text: data.category.name}, element: {classes: ['layout-category-title'], target: title}});
+        categoryIcon.addIcon({item: {icon: selectedIcon, id: 'layout-category-icon'}, element: {classes: ['icon-search']}});
+
+        new MathNode.html.Divider({item: {}, element: {classes: ['noselect'], target: body}});
+
+        packageList = new MathNode.html.List({list: {sortable: true}, element: {target: body}});
+
+        // Load packages belonging to this category
+        Object.keys(data.packages).map(key => {
+            const pkg = data.packages[key];
+            if (pkg.category_id === category) addPackage(pkg);
+        });
+
+        packageList.update();
+        packageList.data = data;
+
+        // Add the save and cancel buttons
+        const buttons = ['layout-package-button', 'noselect', 'big'];
+        new MathNode.html.Divider({item: {}, element: {classes: ['noselect'], target: body}});
+        new MathNode.html.Button( {item: {icon: 'check-circle', text: ' Save', action: save}, element: {classes: [...buttons, 'save', 'green', 'right'], target: body}});
+        new MathNode.html.Button( {item: {icon: 'times', text: ' Delete', action: removeCategory.bind(data)}, element: {classes: [...buttons, 'delete', 'red', 'float', 'left'], target: body}});
+
+        active.category = categories[Object.keys(categories).find(cat => categories[cat].data.category.id === data.category.id)];
+    }
+
+    async function sidebarCategory(category, onclick = () => {}) {
+        const id = 'category-' + parseInt(category.id) + '-button';
+
+        // Create and add category to list
+        const item = categoryList.add([{data: category, item: {draggable: (category.id >= 0), action: onclick}, element: {classes: ['layout-menu-item', 'noselect'], id: id}}]);
+        item.add(new MathNode.html.Icon({item: {icon: category.icon}}));
+        item.add(new MathNode.html.Link({item: {text: category.name}, element: {classes: ['layout-menu-link']}}));
+
+        if (item.draggable) {
+            item.add(new MathNode.html.Icon({item: {icon: 'bars'}, element: {classes: ['layout-grabbable', 'mini', 'right']}}));
+            item.element.addEventListener('dragfinish', onCategoryMove.bind(item));
+        }
+    }
+
+    async function addCategory(category, packages, layout) {
+        const name = 'category-' + parseInt(category.id);
+
+        await sidebarCategory(category);
+
+        // Add to categories list
+        categories[name] = {
+            action: async (data) => { return await onCategoryClick(data); },
+            button: document.getElementById(name + '-button'),
+            page: document.getElementById('layout-' + layout.id + '-page'),
+            data: {category: category, packages: packages, layout: layout},
+            list: categories,
+        };
+        categories[name].button.addEventListener('click', onButtonClick.bind(categories[name]));
+
+        return categories[name];
+    }
+
+    async function createCategories(layout) {
+        const sidebar = document.getElementById('categories-list-sidebar');
+        const data = await mndb.layout.get({id: layout.id});
+        const selected = (active.category) ? {layout: layout.id, item: active.category.data.category.position} : null;
+        $this.layout = new MathNodeLayout(data);
+        sidebar.innerHTML = "";
+
+        categoryList = new MathNode.html.List({list: {sortable: true}, element: {target: sidebar, classes: ['processable']}});
+        categories = {};
+
+        // Load categories belonging to this layout
+        const cats = await Promise.all(Object.keys(data.categories).map(async key => {
+            const category = data.categories[key];
+            return await addCategory(category, data.packages, layout);
+        }));
+
+        active.layout = pages[Object.keys(pages).find(page => pages[page].data.id === layout.id)];
+        active.category = (selected != null && selected.layout === layout.id) ? await getCategoryItemByPosition(selected.item) : cats[0];
+
+        await sidebarCategory({id: -1, name: 'Create New', icon: 'plus-circle'}, newCategory);
+        await view(active.category);
+        categoryList.update();
+    }
+
+    async function getCategoryItemById(id) {
+        return categories[Object.keys(categories).find(cat => categories[cat].data.category.id === id)];
+    }
+
+    async function getCategoryItemByPosition(position) {
+        return categories[Object.keys(categories).find(cat => categories[cat].data.category.position === position)];
+    }
+
+    async function createPage(layout, name) {
+        const sidebar = document.getElementById('layout-list-sidebar');
+        const body = document.getElementById('layout-editor-body');
+
+        // Sidebar link
+        const link = createElement({type: 'a', classes: ['layout-menu-item'], href: '#', id: name + '-button', innerText: HTMLEscape(layout.name), target: sidebar});
+
+        // Layout data container (body)
+        createElement({type: 'div', classes: ['page-container', name], id: name + '-page', target: body});
+    }
+
+    async function update() {
+        document.getElementById('layout-editor-body').innerHTML = '';
+        document.getElementById('layout-list-sidebar').innerHTML = '<span class="layout-menu-title">Layouts</span>';
+
+        await start();
+        mainPage.classList.remove('processing');
+    }
+
+    async function onLayoutClick(layout) {
+        const doSwitch = !$this.modified || confirm('You have made unsaved changes to this category, are you sure you want to switch layouts without saving?');
+
+        if (doSwitch) {
+            $this.modified = false;
+            await createCategories(layout);
+        }
+
+        return doSwitch;
+    }
+
+    async function onCategoryClick(data) {
+        const doSwitch = !$this.modified || confirm('You have made unsaved changes to this category, are you sure you want to change to another without saving?');
+
+        if (doSwitch) {
+            $this.modified = false;
+            await loadCategory(data);
+        }
+
+        return doSwitch;
+    }
+
+    async function init(layouts) {
+        $this.layouts = layouts;
+        $this.modified = false;
+
+        // Set up sidebar links for the layouts
+        await Promise.all(Object.keys(layouts).map(async key => {
+            const id = parseInt(layouts[key].id);
+            const name = 'layout-' + id.toString();
+
+            if (id !== 1) {
+                await createPage(layouts[key], name);
+                pages[name] = {
+                    action: async (layout) => { return await onLayoutClick(layout) },
+                    button: document.getElementById(name + '-button'),
+                    page: document.getElementById(name + '-page'),
+                    data: layouts[key],
+                    list: pages,
+                };
+                pages[name].button.addEventListener('click', onButtonClick.bind(pages[name]));
+            }
+        }));
+
+        if (!$this.listening) {
+            $page.addEventListener('keydown', (e) => {if (e.key.toLowerCase() === 'escape') close();});
+            $page.addEventListener('click', (e) => closeDialogs(e));
+            $this.listening = true;
+        }
+
+        $this.close = close;
+
+        // Select currently active layout (on refresh, for example), otherwise select layout user is using
+        if (active.layout) {
+            active.layout = pages[Object.keys(pages).find(page => pages[page].data.id === active.layout.data.id)];
+        } else {
+            active.layout = pages[Object.keys(pages).find(page => pages[page].data.id === MathNode.Interface.layout.object.id)] || pages[Object.keys(pages)[0]];
+        }
+    }
+
+    async function view(what) {
+        if (await what.action(what.data)) {
+            Object.keys(what.list).map(name => {
+                what.list[name].button.classList.remove('selected');
+                what.list[name].page.classList.add('hidden');
+            });
+
+            what.button.classList.add('selected');
+            what.page.classList.remove('hidden');
+        }
+    }
+
+    async function onButtonClick(e) {
+        await view(this);
+        e.preventDefault();
+    }
+
+    async function closeDialogs() {
+        if (iconsDialog) hideIconsDialog();
+    }
+
+    async function close() {
+        const doClose = !$this.modified || confirm('You have made unsaved changes to this category, are you sure you want to close without saving?');
+
+        if (doClose) {
+            mainPage.classList.add('processing');
+            if (iconsDialog) iconsDialog.remove();
+            await MathNode.Interface.layout.reload();
+            mainPage.classList.remove('processing');
+
+            MathNode.Interface.page.close();
+            $this.listening = false;
+        }
+    }
+
+    start();
+</script>
